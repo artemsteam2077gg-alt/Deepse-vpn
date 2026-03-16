@@ -1,0 +1,50 @@
+workflows:
+  deepse-build:
+    name: DeepSe VPN
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        PYTHON_VERSION: "3.9.13"
+    scripts:
+      - name: Fix OpenSSL
+        script: |
+          # Устанавливаем OpenSSL 3
+          brew install openssl@3
+          
+          # ОБМАН: создаём фейковый openssl@1.1
+          sudo mkdir -p /usr/local/opt/openssl@1.1
+          sudo ln -s /opt/homebrew/opt/openssl@3 /usr/local/opt/openssl@1.1
+          
+          # Устанавливаем остальное
+          brew install automake libtool pkg-config cmake
+          
+          # Python пакеты
+          pip3 install --upgrade pip
+          pip3 install cython==0.29.36
+          pip3 install python-for-android==2024.1.21
+          
+      - name: Check main.py
+        script: |
+          if [ ! -f "main.py" ]; then
+            exit 1
+          fi
+          
+      - name: Build
+        script: |
+          # Отключаем проверку OpenSSL
+          export SKIP_PREREQUISITES_CHECK=1
+          
+          yes | p4a apk --private . \
+            --package=com.deepse.vpn \
+            --name "DeepSe VPN" \
+            --version 0.1 \
+            --bootstrap=sdl2 \
+            --requirements=python3,kivy,requests \
+            --permission INTERNET \
+            --arch=arm64-v8a \
+            --release \
+            --ignore-setup-py
+          
+    artifacts:
+      - bin/*.apk
