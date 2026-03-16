@@ -1,0 +1,55 @@
+workflows:
+  deepse-vpn-build:
+    name: DeepSe VPN APK Build
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        PYTHON_VERSION: "3.9.13"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Check main.py
+        script: |
+          if [ ! -f "main.py" ]; then
+            echo "❌ main.py не найден!"
+            exit 1
+          else
+            echo "✅ main.py найден"
+          fi
+          
+      - name: Install dependencies
+        script: |
+          brew install python3 wget
+          pip3 install --upgrade pip setuptools wheel
+          pip3 install cython==0.29.36
+          pip3 install python-for-android
+          
+      - name: Build APK
+        script: |
+          p4a apk --private . \
+            --package=com.deepse.vpn \
+            --name "DeepSe VPN" \
+            --version 0.1 \
+            --bootstrap=sdl2 \
+            --requirements=python3,kivy==2.3.0,requests==2.31.0 \
+            --permission INTERNET \
+            --arch=arm64-v8a \
+            --release \
+            --ignore-setup-py
+          
+    artifacts:
+      - bin/*.apk
+      
+    publishing:
+      email:
+        recipients:
+          - artemsteam2077gg@gmail.com
+        notify:
+          success: true
+          failure: true
