@@ -1,0 +1,148 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            openjdk-17-jdk \
+            wget \
+            unzip \
+            git \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libffi-dev \
+            libssl-dev \
+            cmake \
+            ninja-build \
+            ccache \
+            gettext \
+            automake \
+            build-essential \
+            python3-dev
+          
+      - name: Install Python packages
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install cython
+          pip install python-for-android
+          pip install kivy
+          pip install requests
+          
+      - name: Setup Android SDK
+        run: |
+          mkdir -p $HOME/android-sdk
+          cd $HOME/android-sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          rm commandlinetools-linux-11076708_latest.zip
+          mkdir -p cmdline-tools
+          mv cmdline-tools cmdline-tools/latest
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          
+      - name: Install SDK and NDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" \
+                     "platforms;android-33" \
+                     "build-tools;33.0.0" \
+                     "ndk;25.2.9519653"
+          
+      - name: Create main.py
+        run: |
+          # Создаём файл построчно (без многострочного EOF)
+          echo 'from kivy.app import App' > main.py
+          echo 'from kivy.uix.boxlayout import BoxLayout' >> main.py
+          echo 'from kivy.uix.button import Button' >> main.py
+          echo 'from kivy.uix.label import Label' >> main.py
+          echo 'from kivy.uix.textinput import TextInput' >> main.py
+          echo 'from kivy.uix.spinner import Spinner' >> main.py
+          echo 'from kivy.clock import Clock' >> main.py
+          echo 'import threading' >> main.py
+          echo 'import requests' >> main.py
+          echo 'import re' >> main.py
+          echo 'import time' >> main.py
+          echo '' >> main.py
+          echo 'THEMES = ["DeepSeek Classic", "Dark Nebula", "Cyber Green"]' >> main.py
+          echo '' >> main.py
+          echo 'class DeepSeApp(App):' >> main.py
+          echo '    def build(self):' >> main.py
+          echo '        layout = BoxLayout(orientation="vertical", padding=20, spacing=10)' >> main.py
+          echo '        self.theme_spinner = Spinner(text=THEMES[0], values=THEMES, size_hint_y=0.1)' >> main.py
+          echo '        layout.add_widget(self.theme_spinner)' >> main.py
+          echo '        self.sub_input = TextInput(text="https://raw.githubusercontent.com/artemsteam2077gg-alt/myvpn/main/happ_subscription.txt", multiline=False, size_hint_y=0.1)' >> main.py
+          echo '        layout.add_widget(self.sub_input)' >> main.py
+          echo '        turbo_btn = Button(text="ТУРБО", size_hint_y=0.2)' >> main.py
+          echo '        turbo_btn.bind(on_press=self.start_turbo)' >> main.py
+          echo '        layout.add_widget(turbo_btn)' >> main.py
+          echo '        hunter_btn = Button(text="ОХОТНИК", size_hint_y=0.2)' >> main.py
+          echo '        hunter_btn.bind(on_press=self.start_hunter)' >> main.py
+          echo '        layout.add_widget(hunter_btn)' >> main.py
+          echo '        self.status = Label(text="Готов", size_hint_y=0.2)' >> main.py
+          echo '        layout.add_widget(self.status)' >> main.py
+          echo '        return layout' >> main.py
+          echo '' >> main.py
+          echo '    def start_turbo(self, btn):' >> main.py
+          echo '        self.status.text = "ТУРБО запущен"' >> main.py
+          echo '' >> main.py
+          echo '    def start_hunter(self, btn):' >> main.py
+          echo '        self.status.text = "ОХОТНИК запущен"' >> main.py
+          echo '' >> main.py
+          echo 'if __name__ == "__main__":' >> main.py
+          echo '    DeepSeApp().run()' >> main.py
+          
+          echo "✅ main.py создан"
+          ls -la main.py
+          
+      - name: Build APK
+        run: |
+          export ANDROIDNDK=$ANDROID_HOME/ndk/25.2.9519653
+          export ANDROIDSDK=$ANDROID_HOME
+          
+          rm -rf ~/.local/share/python-for-android
+          
+          p4a apk --private . \
+            --package=com.deepse.vpn \
+            --name "DeepSe VPN" \
+            --version 0.1 \
+            --bootstrap=sdl2 \
+            --requirements=python3,kivy,requests \
+            --permission INTERNET \
+            --arch=arm64-v8a \
+            --sdk_dir=$ANDROID_HOME \
+            --ndk_dir=$ANDROIDNDK \
+            --android_api=33 \
+            --minsdk=21 \
+            --target-sdk=33 \
+            --release \
+            --ignore-setup-py \
+            --no-download
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepse-vpn-apk
+          path: bin/*.apk
+          if-no-files-found: warn
+          retention-days: 30
