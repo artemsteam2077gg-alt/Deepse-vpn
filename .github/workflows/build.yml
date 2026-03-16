@@ -1,0 +1,101 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            openjdk-17-jdk \
+            wget \
+            unzip \
+            git \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libffi-dev \
+            libssl-dev \
+            cmake
+          
+      - name: Install Python packages
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install Cython==0.29.36
+          pip install python-for-android==2024.10.13
+          
+      - name: Setup Android SDK
+        run: |
+          mkdir -p $HOME/android-sdk
+          cd $HOME/android-sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          rm commandlinetools-linux-11076708_latest.zip
+          mkdir -p cmdline-tools
+          mv cmdline-tools cmdline-tools/latest
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          
+      - name: Install SDK and NDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" \
+                     "platforms;android-33" \
+                     "build-tools;33.0.0" \
+                     "ndk;25.2.9519653"
+          
+      - name: Check for main.py
+        run: |
+          if [ ! -f "main.py" ]; then
+            echo "::error::main.py not found! Create it first."
+            exit 1
+          fi
+          
+      - name: Create requirements.txt
+        run: |
+          cat > requirements.txt << 'EOF'
+          kivy==2.3.0
+          requests==2.31.0
+          EOF
+          
+      - name: Build APK
+        run: |
+          export ANDROIDNDK=$ANDROID_HOME/ndk/25.2.9519653
+          export ANDROIDSDK=$ANDROID_HOME
+          rm -rf ~/.local/share/python-for-android
+          p4a apk --private . \
+            --package=com.deepse.vpn \
+            --name "DeepSe VPN" \
+            --version 0.1 \
+            --bootstrap=sdl2 \
+            --requirements=python3,kivy==2.3.0,requests==2.31.0 \
+            --permission INTERNET \
+            --arch=arm64-v8a \
+            --sdk_dir=$ANDROID_HOME \
+            --ndk_dir=$ANDROIDNDK \
+            --android_api=33 \
+            --minsdk=21 \
+            --target-sdk=33 \
+            --release
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepse-vpn-apk
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 30
