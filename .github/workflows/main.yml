@@ -1,0 +1,178 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          
+      - name: Install ALL system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            openjdk-17-jdk \
+            unzip \
+            wget \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libffi-dev \
+            gettext \
+            libtool-bin \
+            gcc \
+            g++ \
+            make \
+            cmake \
+            build-essential \
+            ninja-build \
+            libssl-dev \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libreadline-dev \
+            libsqlite3-dev \
+            libgdbm-dev \
+            libdb5.3-dev \
+            libbz2-dev \
+            libexpat1-dev \
+            liblzma-dev \
+            tk-dev \
+            libxml2-dev \
+            libxmlsec1-dev \
+            libffi-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libegl1-mesa-dev \
+            libmtdev-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrender-dev \
+            libxrandr-dev \
+            libxfixes-dev \
+            libxcb-shm0-dev \
+            libxcb-xfixes0-dev \
+            libxcb-randr0-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xkb-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxi-dev \
+            libsm-dev \
+            libice-dev \
+            libxss-dev \
+            libxkbfile-dev \
+            libxcomposite-dev \
+            libxdamage-dev \
+            libxinerama-dev \
+            libxmu-dev \
+            libxtst-dev \
+            libxxf86vm-dev \
+            libglu1-mesa-dev \
+            libglew-dev \
+            libglfw3-dev \
+            libgles2-mesa-dev \
+            libegl1-mesa-dev \
+            libwayland-dev \
+            libwayland-egl-backend-dev \
+            wayland-protocols
+          
+      - name: Set up libtool environment
+        run: |
+          # Создаём симлинки для libtool
+          sudo ln -sf /usr/bin/libtool /usr/bin/glibtool
+          sudo ln -sf /usr/bin/libtoolize /usr/bin/glibtoolize
+          
+          # Устанавливаем переменные окружения
+          echo "LT_SYS_LIBRARY_PATH=/usr/lib" >> $GITHUB_ENV
+          echo "LT_SYSROOT=/usr" >> $GITHUB_ENV
+          echo "PATH=/usr/bin:/bin:/usr/local/bin:$PATH" >> $GITHUB_ENV
+          
+      - name: Install Python packages with specific versions
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install Cython==0.29.36
+          pip install --no-cache-dir python-for-android==2024.10.13
+          
+      - name: Set up Android SDK
+        run: |
+          # Download SDK tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          
+          # Set up SDK structure
+          mkdir -p android-sdk/cmdline-tools
+          mv cmdline-tools android-sdk/cmdline-tools/latest
+          
+          # Set environment variables
+          echo "ANDROID_HOME=$PWD/android-sdk" >> $GITHUB_ENV
+          echo "$PWD/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          
+      - name: Install SDK components
+        run: |
+          # Принимаем все лицензии
+          yes | sdkmanager --licenses
+          
+          # Устанавливаем компоненты
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+          
+      - name: Verify installations
+        run: |
+          # Проверяем libtool
+          which libtool
+          libtool --version
+          
+          # Проверяем NDK
+          echo "NDK: $ANDROID_HOME/ndk/25.2.9519653"
+          ls -la $ANDROID_HOME/ndk/25.2.9519653/toolchains
+          
+      - name: Build APK
+        run: |
+          export ANDROID_NDK=$ANDROID_HOME/ndk/25.2.9519653
+          export PATH=/usr/bin:/bin:/usr/local/bin:$PATH
+          export LT_SYS_LIBRARY_PATH=/usr/lib
+          export LT_SYSROOT=/usr
+          export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig
+          export CFLAGS="-I/usr/include -I/usr/include/python3.9"
+          export LDFLAGS="-L/usr/lib -L/usr/lib/python3.9/config-3.9-x86_64-linux-gnu"
+          
+          # Очистка перед сборкой
+          rm -rf ~/.local/share/python-for-android
+          
+          # Сборка с подробным логированием
+          p4a apk --private . \
+            --package=com.deepse.vpn \
+            --name "DeepSe VPN" \
+            --version 0.1 \
+            --bootstrap=sdl2 \
+            --requirements=python3,kivy,requests \
+            --permission INTERNET \
+            --arch=arm64-v8a \
+            --release \
+            --sdk_dir=$ANDROID_HOME \
+            --ndk_dir=$ANDROID_NDK \
+            --ignore-setup-py \
+            --no-download \
+            --verbose
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepse-apk
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 30
