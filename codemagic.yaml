@@ -1,0 +1,23 @@
+workflows:
+  workflow:
+    name: DeepSe VPN Build
+    max_build_duration: 45
+    instance_type: linux
+    scripts:
+      - name: Setup and Build
+        script: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip openjdk-17-jdk
+          pip3 install --user buildozer cython
+          export PATH=$PATH:~/.local/bin
+          
+          if [ ! -f "main.py" ]; then
+            echo "❌ main.py не найден!"
+            exit 1
+          fi
+          
+          echo "✅ main.py найден, начинаю сборку..."
+          yes | buildozer android debug || true
+          
+    artifacts:
+      - bin/*.apk
