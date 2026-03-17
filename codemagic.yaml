@@ -1,0 +1,11 @@
+workflows:
+  deepse-workflow:
+    name: DeepSe
+    max_build_duration: 30
+    instance_type: mac_mini
+    scripts:
+      - name: Build
+        script: |
+          echo "Building DeepSe APK..."
+    artifacts:
+      - build/**/*.apk
